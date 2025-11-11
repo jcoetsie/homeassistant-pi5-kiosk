@@ -1,0 +1,65 @@
+---
+# Logs role - Log rotation and management
+- name: Configure logrotate for kiosk log
+  ansible.builtin.copy:
+    dest: "/etc/logrotate.d/kiosk"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      /home/{{ kiosk_user }}/kiosk.log {
+        weekly
+        rotate 2
+        missingok
+        notifempty
+        compress
+        delaycompress
+        copytruncate
+        su {{ kiosk_user }} {{ kiosk_user }}
+      }
+
+- name: Configure stricter logrotate for system logs
+  ansible.builtin.copy:
+    dest: "/etc/logrotate.d/kiosk-system"
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # More aggressive rotation for Chromium cache and logs
+      /home/{{ kiosk_user }}/.config/chromium-kiosk/*.log {
+        weekly
+        rotate 1
+        missingok
+        notifempty
+        compress
+        delaycompress
+        su {{ kiosk_user }} {{ kiosk_user }}
+      }
+
+      # X session logs
+      /home/{{ kiosk_user }}/.xsession-errors* {
+        weekly
+        rotate 1
+        missingok
+        notifempty
+        compress
+        su {{ kiosk_user }} {{ kiosk_user }}
+      }
+
+- name: Configure journald to limit log size
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    state: present
+  loop:
+    - { key: 'SystemMaxUse', value: '100M' }
+    - { key: 'SystemMaxFileSize', value: '10M' }
+    - { key: 'MaxRetentionSec', value: '2week' }
+  notify: Restart journald
+
+- name: Clean up old logs immediately
+  ansible.builtin.shell: |
+    journalctl --vacuum-size=100M
+    journalctl --vacuum-time=2weeks
+  changed_when: true

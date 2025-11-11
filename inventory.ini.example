@@ -1,0 +1,6 @@
+[kiosk]
+# Replace with your Raspberry Pi's hostname or IP address
+raspberrypi.local ansible_user=kiosk
+
+[kiosk:vars]
+ansible_python_interpreter=/usr/bin/python3

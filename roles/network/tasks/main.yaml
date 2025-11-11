@@ -1,0 +1,65 @@
+---
+# Network role - Network and locale configuration
+- name: Configure NetworkManager for Ethernet with DHCP and auto-negotiation
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/system-connections/eth0.nmconnection
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      [connection]
+      id=Wired connection eth0
+      uuid={{ 999999999999 | random | to_uuid }}
+      type=ethernet
+      interface-name=eth0
+      autoconnect=true
+      autoconnect-priority=10
+      [ethernet]
+      auto-negotiate=true
+      [ipv4]
+      method=auto
+      [ipv6]
+      method=auto
+  notify: Restart NetworkManager
+
+- name: Configure WiFi fallback connection
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/system-connections/wifi-fallback.nmconnection
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      [connection]
+      id=WiFi Fallback
+      uuid={{ 888888888888 | random | to_uuid }}
+      type=wifi
+      autoconnect=true
+      autoconnect-priority=5
+      [wifi]
+      mode=infrastructure
+      ssid={{ wifi_ssid }}
+      [wifi-security]
+      key-mgmt=wpa-psk
+      psk={{ wifi_password }}
+      [ipv4]
+      method=auto
+      [ipv6]
+      method=auto
+  notify: Restart NetworkManager
+  when: wifi_ssid != "YOUR_WIFI_SSID"
+
+- name: Set WiFi country code
+  ansible.builtin.command: raspi-config nonint do_wifi_country {{ wifi_country }}
+  changed_when: true
+  when: wifi_ssid != "YOUR_WIFI_SSID"
+
+- name: Ensure en_GB.UTF-8 locale is generated
+  ansible.builtin.command: locale-gen en_GB.UTF-8
+  changed_when: true
+
+- name: Set LC_ALL in environment
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: 'LC_ALL=en_GB.UTF-8'
+    create: true
+    mode: '0644'

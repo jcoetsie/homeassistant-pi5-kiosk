@@ -1,0 +1,29 @@
+---
+- name: Configure Raspberry Pi 5 for Home Assistant Kiosk Display
+  hosts: kiosk
+  become: true
+  gather_facts: true
+
+  vars:
+    kiosk_user: kiosk
+    kiosk_user_password: "{{ lookup('env', 'KIOSK_PASSWORD') }}"
+    kiosk_url: "{{ lookup('env', 'KIOSK_URL') | default('http://192.168.1.5:8123/lovelace/0', true) }}"
+    home_assistant_ip: "{{ lookup('env', 'HOME_ASSISTANT_IP') | default('192.168.1.5', true) }}"
+    kiosk_browser: chromium-browser
+    keyboard_layout: "{{ lookup('env', 'KEYBOARD_LAYOUT') | default('be', true) }}"
+    wifi_ssid: "{{ lookup('env', 'WIFI_SSID') | default('YOUR_WIFI_SSID', true) }}"
+    wifi_password: "{{ lookup('env', 'WIFI_PASSWORD') | default('YOUR_WIFI_PASSWORD', true) }}"
+    wifi_country: "BE"
+    github_runner_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') | default('', true) }}"
+    github_repo: "{{ lookup('env', 'GITHUB_REPO') | default('', true) }}"
+
+  roles:
+    - role: system
+    - role: network
+    - role: packages
+    - role: vnc
+    - role: kiosk
+    - role: keyboard
+    - role: logs
+    - role: github_runner
+      when: github_runner_token != '' and github_repo != ''

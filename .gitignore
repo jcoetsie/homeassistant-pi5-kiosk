@@ -1,0 +1,44 @@
+# Environment variables with secrets
+.env
+
+# Ansible inventory with actual credentials
+inventory.ini
+
+# Ansible retry files
+*.retry
+
+# Ansible cache
+.ansible/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

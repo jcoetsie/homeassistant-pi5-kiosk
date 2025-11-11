@@ -1,0 +1,23 @@
+---
+profile: production
+
+exclude_paths:
+  - .cache/
+  - venv/
+  - ENV/
+  - env/
+
+warn_list:
+  - experimental
+  - no-handler
+  - fqcn-builtins
+
+skip_list:
+  - role-name[path]  # Allow roles/ directory structure
+  - yaml[line-length]  # Handled by yamllint
+
+# Enable offline mode to avoid external API calls
+offline: false
+
+# Parseable format for CI
+parseable: false

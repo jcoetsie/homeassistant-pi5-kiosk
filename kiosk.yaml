@@ -1,0 +1,768 @@
+---
+- name: Configure Raspberry Pi 5 for Home Assistant Kiosk Display
+  hosts: kiosk # Changed from keuken.local to the inventory group
+  become: true # Run as root
+  gather_facts: true
+  vars:
+    kiosk_user: kiosk # Kiosk user
+    kiosk_user_password: "{{ lookup('env', 'KIOSK_PASSWORD') }}" # REQUIRED: Set KIOSK_PASSWORD env var
+    kiosk_url: "{{ lookup('env', 'KIOSK_URL') | default('http://192.168.1.5:8123/lovelace/0', true) }}" # Set KIOSK_URL env var or use default
+    home_assistant_ip: "{{ lookup('env', 'HOME_ASSISTANT_IP') | default('192.168.1.5', true) }}" # Set HOME_ASSISTANT_IP env var or use default
+    kiosk_browser: chromium-browser # Default on Raspberry Pi OS
+    keyboard_layout: "{{ lookup('env', 'KEYBOARD_LAYOUT') | default('be', true) }}" # Keyboard layout code (be=Belgian, us=US, fr=French, de=German, etc.)
+    wifi_ssid: "{{ lookup('env', 'WIFI_SSID') | default('YOUR_WIFI_SSID', true) }}" # Set WIFI_SSID env var
+    wifi_password: "{{ lookup('env', 'WIFI_PASSWORD') | default('YOUR_WIFI_PASSWORD', true) }}" # Set WIFI_PASSWORD env var
+    wifi_country: "BE" # Change to your country code (BE for Belgium)
+    github_runner_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') | default('', true) }}" # GitHub runner registration token
+    github_repo: "{{ lookup('env', 'GITHUB_REPO') | default('', true) }}" # Format: owner/repo
+  tasks:
+    - name: Create kiosk user
+      ansible.builtin.user:
+        name: "{{ kiosk_user }}"
+        password: "{{ kiosk_user_password | password_hash('sha512') }}"
+        shell: /bin/bash
+        groups: video,audio,input,plugdev
+        append: true
+        create_home: true
+        state: present
+    - name: Allow kiosk user to run systemctl without password
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/kiosk-systemctl
+        owner: root
+        group: root
+        mode: '0440'
+        content: |
+          {{ kiosk_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart lightdm
+          {{ kiosk_user }} ALL=(ALL) NOPASSWD: /bin/systemctl reboot
+        validate: 'visudo -cf %s'
+    - name: Configure NetworkManager for Ethernet with DHCP and auto-negotiation
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/system-connections/eth0.nmconnection
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          [connection]
+          id=Wired connection eth0
+          uuid={{ 999999999999 | random | to_uuid }}
+          type=ethernet
+          interface-name=eth0
+          autoconnect=true
+          autoconnect-priority=10
+          [ethernet]
+          auto-negotiate=true
+          [ipv4]
+          method=auto
+          [ipv6]
+          method=auto
+      notify: Restart NetworkManager
+    - name: Configure WiFi fallback connection
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/system-connections/wifi-fallback.nmconnection
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          [connection]
+          id=WiFi Fallback
+          uuid={{ 888888888888 | random | to_uuid }}
+          type=wifi
+          autoconnect=true
+          autoconnect-priority=5
+          [wifi]
+          mode=infrastructure
+          ssid={{ wifi_ssid }}
+          [wifi-security]
+          key-mgmt=wpa-psk
+          psk={{ wifi_password }}
+          [ipv4]
+          method=auto
+          [ipv6]
+          method=auto
+      notify: Restart NetworkManager
+      when: wifi_ssid != "YOUR_WIFI_SSID"
+    - name: Set WiFi country code
+      ansible.builtin.command: raspi-config nonint do_wifi_country {{ wifi_country }}
+      changed_when: true
+      when: wifi_ssid != "YOUR_WIFI_SSID"
+    - name: Ensure en_GB.UTF-8 locale is generated
+      ansible.builtin.command: locale-gen en_GB.UTF-8
+      changed_when: true
+    - name: Update locale configuration
+      ansible.builtin.command: update-locale LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8
+      changed_when: true
+    - name: Ensure .ssh directory exists for the kiosk user
+      ansible.builtin.file:
+        path: "/home/{{ kiosk_user }}/.ssh"
+        state: directory
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0700'
+    - name: Ensure SSH key is present for the kiosk user
+      ansible.builtin.lineinfile:
+        path: "/home/{{ kiosk_user }}/.ssh/authorized_keys"
+        line: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_rsa.pub') }}"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0600'
+        create: true
+    - name: Update package cache and upgrade all packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+        dpkg_options: 'force-confdef,force-confold'
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      tags: update
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - chromium-browser
+          - xserver-xorg
+          - xinit
+          - lightdm
+          - unclutter  # To hide mouse cursor
+          - matchbox-window-manager  # Lightweight WM for kiosk
+          - matchbox-keyboard  # On-screen keyboard for kiosk
+          - x11-xserver-utils  # Provides xset command
+          - curl  # Required for kiosk script connectivity check
+          - yad  # Yet Another Dialog - for floating keyboard button
+          - logrotate  # Log rotation management
+        state: present
+    - name: Install VNC server
+      ansible.builtin.apt:
+        name:
+          - realvnc-vnc-server
+        state: present
+    - name: Enable VNC server
+      ansible.builtin.command: raspi-config nonint do_vnc 0
+      changed_when: true
+    - name: Create VNC config directory
+      ansible.builtin.file:
+        path: /root/.vnc/config.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Configure VNC authentication to use VncAuth
+      ansible.builtin.copy:
+        dest: /root/.vnc/config.d/vncserver-x11
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          Authentication=VncAuth
+          Encryption=PreferOn
+    - name: Set system-wide VNC password
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf "{{ kiosk_user_password }}\n{{ kiosk_user_password }}\n" | vncpasswd -service
+      changed_when: true
+      no_log: true
+      args:
+        executable: /bin/bash
+    - name: Restart VNC server service
+      ansible.builtin.systemd:
+        name: vncserver-x11-serviced
+        state: restarted
+        enabled: true
+    - name: Ensure graphical boot mode
+      ansible.builtin.command: raspi-config nonint do_boot_behaviour B4
+      changed_when: true
+    - name: Configure autologin for kiosk user
+      ansible.builtin.lineinfile:
+        path: /etc/lightdm/lightdm.conf
+        regexp: '^#?autologin-user='
+        line: 'autologin-user={{ kiosk_user }}'
+        insertafter: '^\[Seat:\*\]'
+        create: true
+        mode: '0644'
+      notify: Restart lightdm
+    - name: Configure autologin session
+      ansible.builtin.lineinfile:
+        path: /etc/lightdm/lightdm.conf
+        regexp: '^#?autologin-session='
+        line: 'autologin-session=lightdm-xsession'
+        insertafter: '^autologin-user='
+        create: true
+        mode: '0644'
+      notify: Restart lightdm
+    - name: Set default session to X for autologin
+      ansible.builtin.lineinfile:
+        path: /etc/lightdm/lightdm.conf
+        regexp: '^#?user-session='
+        line: 'user-session=lightdm-xsession'
+        insertafter: '^\[Seat:\*\]'
+    - name: Disable screensaver and blanking
+      ansible.builtin.blockinfile:
+        path: /etc/xdg/autostart/disable-screensaver.desktop
+        create: true
+        mode: '0644'
+        owner: root
+        group: root
+        block: |
+          [Desktop Entry]
+          Type=Application
+          Exec=xset s off -dpms
+          NoDisplay=true
+    - name: Create kiosk wrapper script for retry logic
+      ansible.builtin.copy:
+        dest: "/home/{{ kiosk_user }}/kiosk.sh"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Log file for debugging
+          LOG_FILE="/home/{{ kiosk_user }}/kiosk.log"
+          exec > >(tee -a "$LOG_FILE") 2>&1
+          echo "$(date): Kiosk script started"
+          # Set DISPLAY environment variable
+          export DISPLAY=:0
+          # Kill any existing chromium instances
+          echo "$(date): Killing existing chromium instances..."
+          killall chromium-browser 2>/dev/null || true
+          killall chromium 2>/dev/null || true
+          sleep 2
+          # Remove chromium's SingletonLock to prevent "already running" issues
+          echo "$(date): Cleaning up chromium lock files..."
+          rm -rf /home/{{ kiosk_user }}/.config/chromium/SingletonLock
+          rm -rf /home/{{ kiosk_user }}/.config/chromium/SingletonCookie
+          rm -rf /home/{{ kiosk_user }}/.config/chromium/SingletonSocket
+          # Wait for network to be up
+          echo "$(date): Checking network connectivity..."
+          until ping -c 1 {{ home_assistant_ip }} &>/dev/null; do
+            echo "$(date): Waiting for network..."
+            sleep 2
+          done
+          echo "$(date): Network is up!"
+          # Wait for Home Assistant to be ready (using GET instead of HEAD)
+          echo "$(date): Waiting for Home Assistant..."
+          MAX_WAIT=12
+          for i in $(seq 1 $MAX_WAIT); do
+            if curl --output /dev/null --silent --fail --max-time 3 "{{ kiosk_url }}"; then
+              echo "$(date): Home Assistant is responding!"
+              break
+            fi
+            echo "$(date): Waiting for Home Assistant... ($i/$MAX_WAIT)"
+            sleep 5
+          done
+          echo "$(date): Launching chromium in kiosk mode..."
+          {{ kiosk_browser }} \
+            --kiosk \
+            --noerrdialogs \
+            --disable-infobars \
+            --no-first-run \
+            --overscroll-history-navigation=0 \
+            --disable-breakpad \
+            --disable-session-crashed-bubble \
+            --disable-restore-session-state \
+            --disable-features=TranslateUI \
+            --check-for-update-interval=31536000 \
+            --password-store=basic \
+            --use-mock-keychain \
+            --enable-features=TouchTextEditingRedesign \
+            --force-tablet-mode=touch \
+            --touch-events=enabled \
+            --enable-pinch \
+            --enable-smooth-scrolling \
+            --user-data-dir=/home/{{ kiosk_user }}/.config/chromium-kiosk \
+            "{{ kiosk_url }}" >> "$LOG_FILE" 2>&1
+
+    - name: Create keyboard toggle script
+      ansible.builtin.copy:
+        dest: "/home/{{ kiosk_user }}/toggle-keyboard.sh"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Toggle matchbox-keyboard visibility
+          export DISPLAY=:0
+
+          if pgrep matchbox-keyboard > /dev/null; then
+            # Keyboard is running, kill it
+            killall matchbox-keyboard
+          else
+            # Start keyboard
+            matchbox-keyboard -s 50 extended &
+          fi
+
+    - name: Configure logrotate for kiosk log
+      ansible.builtin.copy:
+        dest: "/etc/logrotate.d/kiosk"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          /home/{{ kiosk_user }}/kiosk.log {
+            weekly
+            rotate 2
+            missingok
+            notifempty
+            compress
+            delaycompress
+            copytruncate
+            su {{ kiosk_user }} {{ kiosk_user }}
+          }
+
+    - name: Configure stricter logrotate for system logs
+      ansible.builtin.copy:
+        dest: "/etc/logrotate.d/kiosk-system"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # More aggressive rotation for Chromium cache and logs
+          /home/{{ kiosk_user }}/.config/chromium-kiosk/*.log {
+            weekly
+            rotate 1
+            missingok
+            notifempty
+            compress
+            delaycompress
+            su {{ kiosk_user }} {{ kiosk_user }}
+          }
+
+          # X session logs
+          /home/{{ kiosk_user }}/.xsession-errors* {
+            weekly
+            rotate 1
+            missingok
+            notifempty
+            compress
+            su {{ kiosk_user }} {{ kiosk_user }}
+          }
+
+    - name: Configure journald to limit log size
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf
+        regexp: "^#?{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+        state: present
+      loop:
+        - { key: 'SystemMaxUse', value: '100M' }
+        - { key: 'SystemMaxFileSize', value: '10M' }
+        - { key: 'MaxRetentionSec', value: '2week' }
+      notify: Restart journald
+
+    - name: Clean up old logs immediately
+      ansible.builtin.shell: |
+        journalctl --vacuum-size=100M
+        journalctl --vacuum-time=2weeks
+      changed_when: true
+
+    - name: Configure matchbox-keyboard layout for Belgian French
+      ansible.builtin.copy:
+        dest: "/usr/share/matchbox-keyboard/keyboard-be.xml"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <keyboard>
+            <layout id="Belgian">
+              <row>
+                <key obey-caps="yes">
+                  <default display="a" action="a"/>
+                  <shifted display="A" action="A"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="z" action="z"/>
+                  <shifted display="Z" action="Z"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="e" action="e"/>
+                  <shifted display="E" action="E"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="r" action="r"/>
+                  <shifted display="R" action="R"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="t" action="t"/>
+                  <shifted display="T" action="T"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="y" action="y"/>
+                  <shifted display="Y" action="Y"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="u" action="u"/>
+                  <shifted display="U" action="U"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="i" action="i"/>
+                  <shifted display="I" action="I"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="o" action="o"/>
+                  <shifted display="O" action="O"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="p" action="p"/>
+                  <shifted display="P" action="P"/>
+                </key>
+                <key width="150">
+                  <default display="⌫" action="BackSpace"/>
+                </key>
+              </row>
+              <row>
+                <key obey-caps="yes">
+                  <default display="q" action="q"/>
+                  <shifted display="Q" action="Q"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="s" action="s"/>
+                  <shifted display="S" action="S"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="d" action="d"/>
+                  <shifted display="D" action="D"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="f" action="f"/>
+                  <shifted display="F" action="F"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="g" action="g"/>
+                  <shifted display="G" action="G"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="h" action="h"/>
+                  <shifted display="H" action="H"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="j" action="j"/>
+                  <shifted display="J" action="J"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="k" action="k"/>
+                  <shifted display="K" action="K"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="l" action="l"/>
+                  <shifted display="L" action="L"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="m" action="m"/>
+                  <shifted display="M" action="M"/>
+                </key>
+                <key width="150">
+                  <default display="↵" action="Return"/>
+                </key>
+              </row>
+              <row>
+                <key width="150">
+                  <default display="⇧" action="modifier:shift"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="w" action="w"/>
+                  <shifted display="W" action="W"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="x" action="x"/>
+                  <shifted display="X" action="X"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="c" action="c"/>
+                  <shifted display="C" action="C"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="v" action="v"/>
+                  <shifted display="V" action="V"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="b" action="b"/>
+                  <shifted display="B" action="B"/>
+                </key>
+                <key obey-caps="yes">
+                  <default display="n" action="n"/>
+                  <shifted display="N" action="N"/>
+                </key>
+                <key>
+                  <default display="," action=","/>
+                  <shifted display="?" action="?"/>
+                </key>
+                <key>
+                  <default display=";" action=";"/>
+                  <shifted display="." action="."/>
+                </key>
+                <key>
+                  <default display=":" action=":"/>
+                  <shifted display="/" action="/"/>
+                </key>
+                <key>
+                  <default display="!" action="!"/>
+                  <shifted display="§" action="§"/>
+                </key>
+              </row>
+              <row>
+                <key width="200">
+                  <default display="123" action="layout:num"/>
+                </key>
+                <key width="600">
+                  <default display=" " action=" "/>
+                </key>
+                <key>
+                  <default display="é" action="é"/>
+                  <shifted display="É" action="É"/>
+                </key>
+                <key>
+                  <default display="è" action="è"/>
+                  <shifted display="È" action="È"/>
+                </key>
+                <key>
+                  <default display="ç" action="ç"/>
+                  <shifted display="Ç" action="Ç"/>
+                </key>
+                <key>
+                  <default display="à" action="à"/>
+                  <shifted display="À" action="À"/>
+                </key>
+                <key width="150">
+                  <default display="🗙" action="close"/>
+                </key>
+              </row>
+            </layout>
+            <layout id="num">
+              <row>
+                <key><default display="1" action="1"/></key>
+                <key><default display="2" action="2"/></key>
+                <key><default display="3" action="3"/></key>
+                <key><default display="4" action="4"/></key>
+                <key><default display="5" action="5"/></key>
+                <key><default display="6" action="6"/></key>
+                <key><default display="7" action="7"/></key>
+                <key><default display="8" action="8"/></key>
+                <key><default display="9" action="9"/></key>
+                <key><default display="0" action="0"/></key>
+                <key width="150">
+                  <default display="⌫" action="BackSpace"/>
+                </key>
+              </row>
+              <row>
+                <key><default display="@" action="@"/></key>
+                <key><default display="#" action="#"/></key>
+                <key><default display="€" action="€"/></key>
+                <key><default display="%" action="%"/></key>
+                <key><default display="&amp;" action="&amp;"/></key>
+                <key><default display="*" action="*"/></key>
+                <key><default display="-" action="-"/></key>
+                <key><default display="+" action="+"/></key>
+                <key><default display="(" action="("/></key>
+                <key><default display=")" action=")"/></key>
+                <key width="150">
+                  <default display="↵" action="Return"/>
+                </key>
+              </row>
+              <row>
+                <key><default display="'" action="'"/></key>
+                <key><default display="&quot;" action="&quot;"/></key>
+                <key><default display="`" action="`"/></key>
+                <key><default display="~" action="~"/></key>
+                <key><default display="/" action="/"/></key>
+                <key><default display="\" action="\"/></key>
+                <key><default display="|" action="|"/></key>
+                <key><default display="[" action="["/></key>
+                <key><default display="]" action="]"/></key>
+                <key><default display="{" action="{"/></key>
+                <key><default display="}" action="}"/></key>
+              </row>
+              <row>
+                <key width="200">
+                  <default display="ABC" action="layout:Belgian"/>
+                </key>
+                <key width="600">
+                  <default display=" " action=" "/>
+                </key>
+                <key><default display="." action="."/></key>
+                <key><default display="," action=","/></key>
+                <key><default display="?" action="?"/></key>
+                <key><default display="!" action="!"/></key>
+                <key width="150">
+                  <default display="🗙" action="close"/>
+                </key>
+              </row>
+            </layout>
+          </keyboard>
+
+    - name: Create floating keyboard button script
+      ansible.builtin.copy:
+        dest: "/home/{{ kiosk_user }}/keyboard-button.sh"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          export DISPLAY=:0
+
+          # Wait for X to be ready
+          while ! xset q &>/dev/null; do
+            sleep 1
+          done
+
+          # Create a floating button in bottom right corner
+          while true; do
+            yad --button="⌨️:0" \
+              --no-buttons \
+              --undecorated \
+              --skip-taskbar \
+              --on-top \
+              --geometry=80x80-20+20 \
+              --title="Keyboard" \
+              --no-escape \
+              --fixed \
+              --timeout=86400 \
+              --timeout-indicator=false \
+              2>/dev/null
+
+            # When button clicked, toggle keyboard
+            /home/{{ kiosk_user }}/toggle-keyboard.sh
+
+            # Small delay before showing button again
+            sleep 0.5
+          done
+
+    - name: Ensure .config directory exists for kiosk user
+      ansible.builtin.file:
+        path: "/home/{{ kiosk_user }}/.config"
+        state: directory
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0755'
+
+    - name: Set system keyboard layout
+      ansible.builtin.command: raspi-config nonint do_configure_keyboard {{ keyboard_layout }}
+      changed_when: true
+
+    - name: Configure X session for kiosk mode
+      ansible.builtin.copy:
+        dest: "/home/{{ kiosk_user }}/.xinitrc"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          # Set DISPLAY
+          export DISPLAY=:0
+
+          # Set keyboard layout
+          setxkbmap {{ keyboard_layout }}
+
+          # Configure screen blanking after 10 minutes of inactivity
+          xset s 600 600        # Screensaver timeout: 10 minutes
+          xset dpms 0 0 600     # DPMS: standby off, suspend off, off after 10 min
+
+          # Hide mouse cursor
+          unclutter -idle 0.1 -root &
+
+          # Start window manager
+          matchbox-window-manager -use_titlebar no &
+
+          # Wait a bit for X to stabilize
+          sleep 2
+
+          # Start floating keyboard button in background
+          /home/{{ kiosk_user }}/keyboard-button.sh &
+
+          # Start kiosk script
+          /home/{{ kiosk_user }}/kiosk.sh
+
+    # GitHub Actions Runner Setup
+    - name: Install GitHub runner dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - jq
+          - git
+          - libicu-dev
+        state: present
+
+    - name: Create GitHub runner user
+      ansible.builtin.user:
+        name: github-runner
+        comment: "GitHub Actions Runner"
+        shell: /bin/bash
+        create_home: true
+        system: true
+
+    - name: Check if GitHub runner is already installed
+      ansible.builtin.stat:
+        path: /home/github-runner/actions-runner
+      register: runner_dir
+
+    - name: Create runner directory
+      ansible.builtin.file:
+        path: /home/github-runner/actions-runner
+        state: directory
+        owner: github-runner
+        group: github-runner
+        mode: '0755'
+      when: not runner_dir.stat.exists
+
+    - name: Get latest GitHub runner version
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/actions/runner/releases/latest
+        return_content: true
+      register: runner_latest
+      when: not runner_dir.stat.exists
+
+    - name: Download and extract GitHub runner
+      ansible.builtin.unarchive:
+        src: >-
+          https://github.com/actions/runner/releases/download/v{{ runner_latest.json.tag_name | regex_replace('^v', '') }}/
+          actions-runner-linux-arm64-{{ runner_latest.json.tag_name | regex_replace('^v', '') }}.tar.gz
+        dest: /home/github-runner/actions-runner
+        remote_src: true
+        owner: github-runner
+        group: github-runner
+      when: not runner_dir.stat.exists and github_runner_token != ''
+
+    - name: Configure GitHub runner
+      ansible.builtin.shell: |
+        cd /home/github-runner/actions-runner
+        ./config.sh \
+          --url https://github.com/{{ github_repo }} \
+          --token {{ github_runner_token }} \
+          --name {{ ansible_hostname }}-runner \
+          --work _work \
+          --labels raspberry-pi,arm64,kiosk \
+          --unattended
+      become: true
+      become_user: github-runner
+      args:
+        creates: /home/github-runner/actions-runner/.runner
+      when: github_runner_token != '' and github_repo != ''
+
+    - name: Install GitHub runner as systemd service
+      ansible.builtin.shell: |
+        cd /home/github-runner/actions-runner
+        ./svc.sh install github-runner
+      args:
+        creates: /etc/systemd/system/actions.runner.*
+      when: github_runner_token != '' and github_repo != ''
+
+    - name: Start and enable GitHub runner service
+      ansible.builtin.systemd:
+        name: "actions.runner.{{ github_repo.split('/')[0] }}-{{ github_repo.split('/')[1] }}.{{ ansible_hostname }}-runner.service"
+        state: started
+        enabled: true
+        daemon_reload: true
+      when: github_runner_token != '' and github_repo != ''
+
+  handlers:
+    - name: Restart lightdm
+      ansible.builtin.service:
+        name: lightdm
+        state: restarted
+    - name: Restart NetworkManager
+      ansible.builtin.service:
+        name: NetworkManager
+        state: restarted
+    - name: Restart journald
+      ansible.builtin.service:
+        name: systemd-journald
+        state: restarted

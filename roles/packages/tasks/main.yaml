@@ -1,0 +1,28 @@
+---
+# Packages role - Install all required packages
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - chromium-browser
+      - xserver-xorg
+      - xinit
+      - lightdm
+      - unclutter
+      - matchbox-window-manager
+      - matchbox-keyboard
+      - x11-xserver-utils
+      - curl
+      - yad
+      - logrotate
+    state: present
+
+- name: Configure lightdm to autologin kiosk user
+  ansible.builtin.lineinfile:
+    path: /etc/lightdm/lightdm.conf
+    regexp: "^#?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    state: present
+  loop:
+    - { key: 'autologin-user', value: '{{ kiosk_user }}' }
+    - { key: 'autologin-user-timeout', value: '0' }
+  notify: Restart lightdm

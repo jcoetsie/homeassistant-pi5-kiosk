@@ -1,0 +1,50 @@
+---
+# System role - User creation and basic system configuration
+- name: Create kiosk user
+  ansible.builtin.user:
+    name: "{{ kiosk_user }}"
+    password: "{{ kiosk_user_password | password_hash('sha512') }}"
+    shell: /bin/bash
+    groups: video,audio,input,plugdev
+    append: true
+    create_home: true
+    state: present
+
+- name: Allow kiosk user to run systemctl without password
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/kiosk-systemctl
+    owner: root
+    group: root
+    mode: '0440'
+    content: |
+      {{ kiosk_user }} ALL=(ALL) NOPASSWD: /bin/systemctl restart lightdm
+      {{ kiosk_user }} ALL=(ALL) NOPASSWD: /bin/systemctl reboot
+    validate: 'visudo -cf %s'
+
+- name: Ensure SSH directory exists for kiosk user
+  ansible.builtin.file:
+    path: "/home/{{ kiosk_user }}/.ssh"
+    state: directory
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: '0700'
+
+- name: Ensure SSH key is present for the kiosk user
+  ansible.builtin.lineinfile:
+    path: "/home/{{ kiosk_user }}/.ssh/authorized_keys"
+    line: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_rsa.pub') }}"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: '0600'
+    create: true
+
+- name: Update package cache and upgrade all packages
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    autoremove: true
+    autoclean: true
+    dpkg_options: 'force-confdef,force-confold'
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  tags: update

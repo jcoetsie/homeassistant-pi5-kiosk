@@ -1,0 +1,56 @@
+---
+name: Kiosk Maintenance
+
+on:
+  schedule:
+    # Run every Saturday at 02:00 (2 AM)
+    - cron: '0 2 * * 6'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update-kiosk:
+    runs-on: [self-hosted, raspberry-pi]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible if not present
+        run: |
+          if ! command -v ansible-playbook &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ansible
+          fi
+
+      - name: Run Ansible playbook on localhost
+        env:
+          KIOSK_PASSWORD: ${{ secrets.KIOSK_PASSWORD }}
+          KIOSK_URL: ${{ secrets.KIOSK_URL }}
+          HOME_ASSISTANT_IP: ${{ secrets.HOME_ASSISTANT_IP }}
+          KEYBOARD_LAYOUT: ${{ secrets.KEYBOARD_LAYOUT }}
+          WIFI_SSID: ${{ secrets.WIFI_SSID }}
+          WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
+          GITHUB_RUNNER_TOKEN: ${{ secrets.GH_RUNNER_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          ansible-playbook -i inventory.ini playbook.yaml
+
+      - name: Reboot if required
+        if: success()
+        run: |
+          if [ -f /var/run/reboot-required ]; then
+            echo "Reboot required, scheduling reboot in 1 minute..."
+            sudo shutdown -r +1 "Scheduled reboot after maintenance"
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          HOME_ASSISTANT_IP: ${{ secrets.HOME_ASSISTANT_IP }}
+        run: |
+          echo "⚠️ Kiosk maintenance failed at $(date)"
+          # Optional: Send notification to Home Assistant
+          if [ -n "$HOME_ASSISTANT_IP" ]; then
+            curl -X POST "http://${HOME_ASSISTANT_IP}:8123/api/webhook/kiosk_maintenance_failed" \
+              -H "Content-Type: application/json" \
+              -d '{"status": "failed", "time": "'$(date -Iseconds)'"}'
+          fi

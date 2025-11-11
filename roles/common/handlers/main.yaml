@@ -1,0 +1,16 @@
+---
+# Handlers for all roles
+- name: Restart lightdm
+  ansible.builtin.service:
+    name: lightdm
+    state: restarted
+
+- name: Restart NetworkManager
+  ansible.builtin.service:
+    name: NetworkManager
+    state: restarted
+
+- name: Restart journald
+  ansible.builtin.service:
+    name: systemd-journald
+    state: restarted

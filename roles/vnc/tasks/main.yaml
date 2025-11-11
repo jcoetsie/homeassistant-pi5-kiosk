@@ -1,0 +1,48 @@
+---
+# VNC role - Configure VNC remote access
+- name: Install VNC server
+  ansible.builtin.apt:
+    name:
+      - realvnc-vnc-server
+    state: present
+
+- name: Enable VNC server
+  ansible.builtin.command: raspi-config nonint do_vnc 0
+  changed_when: true
+
+- name: Create VNC config directory
+  ansible.builtin.file:
+    path: /root/.vnc/config.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure VNC authentication to use VncAuth
+  ansible.builtin.copy:
+    dest: /root/.vnc/config.d/vncserver-x11
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Authentication=VncAuth
+      Encryption=PreferOn
+
+- name: Set system-wide VNC password
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "{{ kiosk_user_password }}\n{{ kiosk_user_password }}\n" | vncpasswd -service
+  args:
+    executable: /bin/bash
+  changed_when: true
+  no_log: true
+
+- name: Restart VNC server service
+  ansible.builtin.systemd:
+    name: vncserver-x11-serviced
+    state: restarted
+    enabled: true
+
+- name: Ensure graphical boot mode
+  ansible.builtin.command: raspi-config nonint do_boot_behaviour B4
+  changed_when: true

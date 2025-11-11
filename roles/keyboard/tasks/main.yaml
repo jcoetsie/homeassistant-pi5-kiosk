@@ -1,0 +1,77 @@
+---
+# Keyboard role - On-screen keyboard and layout configuration
+- name: Set system keyboard layout
+  ansible.builtin.command: raspi-config nonint do_configure_keyboard {{ keyboard_layout }}
+  changed_when: true
+
+- name: Create keyboard toggle script
+  ansible.builtin.copy:
+    dest: "/home/{{ kiosk_user }}/toggle-keyboard.sh"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      # Toggle matchbox-keyboard visibility
+      export DISPLAY=:0
+
+      if pgrep matchbox-keyboard > /dev/null; then
+        # Keyboard is running, kill it
+        killall matchbox-keyboard
+      else
+        # Start keyboard
+        matchbox-keyboard -s 50 extended &
+      fi
+
+- name: Create floating keyboard button script
+  ansible.builtin.copy:
+    dest: "/home/{{ kiosk_user }}/keyboard-button.sh"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      export DISPLAY=:0
+
+      # Wait for X to be ready
+      while ! xset q &>/dev/null; do
+        sleep 1
+      done
+
+      # Create a floating button in bottom right corner
+      while true; do
+        yad --button="⌨️:0" \
+          --no-buttons \
+          --undecorated \
+          --skip-taskbar \
+          --on-top \
+          --geometry=80x80-20+20 \
+          --title="Keyboard" \
+          --no-escape \
+          --fixed \
+          --timeout=86400 \
+          --timeout-indicator=false \
+          2>/dev/null
+
+        # When button clicked, toggle keyboard
+        /home/{{ kiosk_user }}/toggle-keyboard.sh
+
+        # Small delay before showing button again
+        sleep 0.5
+      done
+
+- name: Ensure .config directory exists for kiosk user
+  ansible.builtin.file:
+    path: "/home/{{ kiosk_user }}/.config"
+    state: directory
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: '0755'
+
+- name: Configure matchbox-keyboard layout for Belgian French
+  ansible.builtin.template:
+    src: keyboard-be.xml.j2
+    dest: /usr/share/matchbox-keyboard/keyboard-be.xml
+    owner: root
+    group: root
+    mode: '0644'

@@ -1,0 +1,29 @@
+# Gitleaks configuration for detecting secrets
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for false positives"
+paths = [
+  '''.env.example''',
+  '''inventory.ini.example''',
+  '''README.md''',
+  '''ANSIBLE_STRUCTURE.md''',
+  '''RESTRUCTURE_SUMMARY.md''',
+  '''CONTRIBUTING.md''',
+  '''VERSIONING_SETUP.md'''
+]
+
+regexes = [
+  '''YOUR_WIFI_SSID''',
+  '''YOUR_WIFI_PASSWORD''',
+  '''kiosk123''',
+  '''your_secure_password_here''',
+  '''your-token-here''',
+  '''yourusername/yourrepo''',
+  '''192\.168\.1\.5''',
+  '''example\.com''',
+  '''raspberrypi\.local'''
+]

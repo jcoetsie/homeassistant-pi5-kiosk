@@ -1,0 +1,30 @@
+{
+  "name": "homeassistant-pi5-kiosk",
+  "version": "1.0.0",
+  "description": "Ansible playbook to configure a Raspberry Pi 5 as a dedicated touchscreen kiosk for Home Assistant",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jcoetsie/homeassistant-pi5-kiosk.git"
+  },
+  "author": "Jurgen Coetsiers",
+  "license": "MIT",
+  "scripts": {
+    "commit": "cz",
+    "release": "standard-version",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:patch": "standard-version --release-as patch"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "commitizen": "^4.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "standard-version": "^9.5.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

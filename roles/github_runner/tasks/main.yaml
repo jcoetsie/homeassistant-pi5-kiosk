@@ -1,0 +1,83 @@
+---
+# GitHub Runner role - Optional GitHub Actions self-hosted runner
+- name: Install GitHub runner dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - jq
+      - git
+      - libicu-dev
+    state: present
+
+- name: Create GitHub runner user
+  ansible.builtin.user:
+    name: github-runner
+    comment: "GitHub Actions Runner"
+    shell: /bin/bash
+    create_home: true
+    system: true
+
+- name: Check if GitHub runner is already installed
+  ansible.builtin.stat:
+    path: /home/github-runner/actions-runner
+  register: runner_dir
+
+- name: Create runner directory
+  ansible.builtin.file:
+    path: /home/github-runner/actions-runner
+    state: directory
+    owner: github-runner
+    group: github-runner
+    mode: '0755'
+  when: not runner_dir.stat.exists
+
+- name: Get latest GitHub runner version
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/actions/runner/releases/latest
+    return_content: true
+  register: runner_latest
+  when: not runner_dir.stat.exists
+
+- name: Download and extract GitHub runner
+  ansible.builtin.unarchive:
+    src: >-
+      https://github.com/actions/runner/releases/download/v{{
+      runner_latest.json.tag_name | regex_replace('^v', '')
+      }}/actions-runner-linux-arm64-{{
+      runner_latest.json.tag_name | regex_replace('^v', '') }}.tar.gz
+    dest: /home/github-runner/actions-runner
+    remote_src: true
+    owner: github-runner
+    group: github-runner
+  when: not runner_dir.stat.exists and github_runner_token != ''
+
+- name: Configure GitHub runner
+  ansible.builtin.shell: |
+    cd /home/github-runner/actions-runner
+    ./config.sh --url https://github.com/{{ github_repo }} \
+      --token {{ github_runner_token }} \
+      --name {{ ansible_hostname }}-runner \
+      --work _work \
+      --labels raspberry-pi,arm64,kiosk \
+      --unattended
+  become: true
+  become_user: github-runner
+  args:
+    creates: /home/github-runner/actions-runner/.runner
+  when: github_runner_token != '' and github_repo != ''
+
+- name: Install GitHub runner as systemd service
+  ansible.builtin.shell: |
+    cd /home/github-runner/actions-runner
+    ./svc.sh install github-runner
+  args:
+    creates: /etc/systemd/system/actions.runner.*
+  when: github_runner_token != '' and github_repo != ''
+
+- name: Start and enable GitHub runner service
+  ansible.builtin.systemd:
+    name: "actions.runner.{{ github_repo.split('/')[0] }}-{{ github_repo.split('/')[1] }}.{{ ansible_hostname }}-runner.service"
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: github_runner_token != '' and github_repo != ''
