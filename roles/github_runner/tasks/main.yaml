@@ -20,7 +20,7 @@
 - name: Check if GitHub runner is already installed
   ansible.builtin.stat:
     path: /home/github-runner/actions-runner
-  register: runner_dir
+  register: github_runner_dir
 
 - name: Create runner directory
   ansible.builtin.file:
@@ -29,27 +29,27 @@
     owner: github-runner
     group: github-runner
     mode: '0755'
-  when: not runner_dir.stat.exists
+  when: not github_runner_dir.stat.exists
 
 - name: Get latest GitHub runner version
   ansible.builtin.uri:
     url: https://api.github.com/repos/actions/runner/releases/latest
     return_content: true
-  register: runner_latest
-  when: not runner_dir.stat.exists
+  register: github_runner_latest
+  when: not github_runner_dir.stat.exists
 
 - name: Download and extract GitHub runner
   ansible.builtin.unarchive:
     src: >-
       https://github.com/actions/runner/releases/download/v{{
-      runner_latest.json.tag_name | regex_replace('^v', '')
+      github_runner_latest.json.tag_name | regex_replace('^v', '')
       }}/actions-runner-linux-arm64-{{
-      runner_latest.json.tag_name | regex_replace('^v', '') }}.tar.gz
+      github_runner_latest.json.tag_name | regex_replace('^v', '') }}.tar.gz
     dest: /home/github-runner/actions-runner
     remote_src: true
     owner: github-runner
     group: github-runner
-  when: not runner_dir.stat.exists and github_runner_token != ''
+  when: not github_runner_dir.stat.exists and github_runner_token != ''
 
 - name: Configure GitHub runner
   ansible.builtin.shell: |
