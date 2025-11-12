@@ -22,6 +22,7 @@
     regexp: "^#?{{ item.key }}="
     line: "{{ item.key }}={{ item.value }}"
     state: present
+  become: true
   loop:
     - { key: 'autologin-user', value: '{{ kiosk_user }}' }
     - { key: 'autologin-user-timeout', value: '0' }
