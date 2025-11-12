@@ -1,0 +1,8 @@
+# markdownlint-cli2 configuration
+# https://github.com/DavidAnson/markdownlint-cli2#configuration
+
+# Ignore files
+ignores:
+  - CHANGELOG.md
+  - node_modules
+  - vendor
