@@ -1,6 +1,6 @@
 {
   "name": "homeassistant-pi5-kiosk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Ansible playbook to configure a Raspberry Pi 5 as a dedicated touchscreen kiosk for Home Assistant",
   "repository": {
     "type": "git",
