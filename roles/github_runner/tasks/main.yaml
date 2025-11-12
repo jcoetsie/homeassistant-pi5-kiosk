@@ -74,10 +74,17 @@
     creates: /etc/systemd/system/actions.runner.*
   when: github_runner_token != '' and github_repo != ''
 
+- name: Find GitHub runner service name
+  ansible.builtin.find:
+    paths: /etc/systemd/system
+    patterns: 'actions.runner.*.service'
+  register: github_runner_service_files
+  when: github_runner_token != '' and github_repo != ''
+
 - name: Start and enable GitHub runner service
   ansible.builtin.systemd:
-    name: "actions.runner.{{ github_repo.split('/')[0] }}-{{ github_repo.split('/')[1] }}.{{ ansible_hostname }}-runner.service"
+    name: "{{ github_runner_service_files.files[0].path | basename }}"
     state: started
     enabled: true
     daemon_reload: true
-  when: github_runner_token != '' and github_repo != ''
+  when: github_runner_token != '' and github_repo != '' and github_runner_service_files.matched > 0
