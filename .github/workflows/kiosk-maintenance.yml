@@ -14,12 +14,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Ansible if not present
+      - name: Check Ansible installation
         run: |
           if ! command -v ansible-playbook &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y ansible
+            echo "❌ Ansible is not installed. Please install it manually on the runner."
+            exit 1
           fi
+          ansible-playbook --version
 
       - name: Run Ansible playbook on localhost
         env:
