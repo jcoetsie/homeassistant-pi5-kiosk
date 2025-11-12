@@ -28,7 +28,7 @@
     state: directory
     owner: github-runner
     group: github-runner
-    mode: '0755'
+    mode: "0755"
   when: not github_runner_dir.stat.exists
 
 - name: Get latest GitHub runner version
