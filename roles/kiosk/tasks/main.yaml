@@ -75,6 +75,9 @@
       # Set DISPLAY
       export DISPLAY=:0
 
+      # Kill gnome-keyring to prevent password prompts
+      pkill -9 -f gnome-keyring-daemon 2>/dev/null || true
+
       # Set keyboard layout
       setxkbmap {{ keyboard_layout }}
 
