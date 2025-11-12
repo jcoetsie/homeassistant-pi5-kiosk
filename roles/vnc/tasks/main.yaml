@@ -31,9 +31,10 @@
 - name: Set system-wide VNC password
   ansible.builtin.shell: |
     set -o pipefail
-    printf "{{ kiosk_user_password }}\n{{ kiosk_user_password }}\n" | vncpasswd -service
+    echo "{{ kiosk_user_password }}" | vncpasswd -service
   args:
     executable: /bin/bash
+  become: true
   changed_when: true
   no_log: true
 
