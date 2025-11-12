@@ -59,6 +59,12 @@ git push origin feat/my-new-feature
 gh pr create
 ```
 
+**Important:** The `main` branch is protected and requires:
+- ✅ All CI checks must pass (Ansible lint, YAML lint, security scans, etc.)
+- ✅ Changes must be submitted via Pull Request
+- ✅ All PR conversations must be resolved
+- ⚠️ Direct pushes to `main` are blocked
+
 ## Commit Message Format
 
 ### Structure

@@ -585,6 +585,15 @@ Contributions are welcome! This project uses [Conventional Commits](https://www.
 - [Commit Convention](.github/COMMIT_CONVENTION.md) - Quick reference for commit messages
 - [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md) - PR checklist
 
+### Branch Protection
+
+The `main` branch is protected to ensure code quality:
+
+- 🔒 **Direct pushes blocked** - All changes must go through Pull Requests
+- ✅ **Required CI checks** - All linting and security scans must pass
+- 💬 **Conversation resolution** - All PR discussions must be resolved before merging
+- 🚫 **Force pushes disabled** - Prevents accidental history rewriting
+
 All PRs must:
 - ✅ Follow conventional commit format
 - ✅ Pass all CI checks (linting, security, tests)
