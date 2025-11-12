@@ -22,7 +22,8 @@ pip install \
     ansible-core \
     ansible-lint \
     yamllint \
-    pre-commit
+    pre-commit \
+    passlib
 
 # Install Node.js dependencies
 echo "📦 Installing Node.js dependencies..."
