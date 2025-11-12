@@ -16,14 +16,14 @@
     state: directory
     owner: root
     group: root
-    mode: '0755'
+    mode: "0755"
 
 - name: Configure VNC authentication to use VncAuth
   ansible.builtin.copy:
     dest: /root/.vnc/config.d/vncserver-x11
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
     content: |
       Authentication=VncAuth
       Encryption=PreferOn

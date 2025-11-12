@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release-type:
-        description: 'Release type'
+        description: "Release type"
         required: true
         type: choice
         options:
@@ -12,7 +12,7 @@ on:
           - patch
           - minor
           - major
-        default: 'auto'
+        default: "auto"
 
 permissions:
   contents: write
@@ -26,12 +26,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use PAT to bypass branch protection for automated releases
+          # Falls back to GITHUB_TOKEN if PAT is not configured
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install dependencies
         run: npm install

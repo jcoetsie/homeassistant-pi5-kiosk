@@ -153,6 +153,7 @@ The repository includes automatic weekly maintenance via GitHub Actions.
    - Go to `Settings → Secrets and variables → Actions`
    - **Required secrets:**
      - `KIOSK_PASSWORD` - Kiosk user password
+     - `PAT_TOKEN` - Personal Access Token for automated releases (see [Release Setup](#automated-releases) below)
    - **Optional secrets** (will use defaults from playbook if not set):
      - `KIOSK_URL` - Home Assistant dashboard URL
      - `HOME_ASSISTANT_IP` - Home Assistant IP address (also used for failure webhook notifications)
@@ -475,6 +476,28 @@ Releases are automated via GitHub Actions workflow:
 2. **Changelog Generation**: Automatically generated from commit messages
 
 3. **GitHub Release**: Creates a GitHub release with changelog
+
+#### Setup: Create Personal Access Token (Required)
+
+Since the `main` branch is protected, automated releases need a Personal Access Token (PAT) to bypass branch protection:
+
+1. **Create a Personal Access Token:**
+   - Go to: <https://github.com/settings/tokens?type=beta>
+   - Click "Generate new token" (Fine-grained token recommended)
+   - Set token name: `homeassistant-pi5-kiosk-releases`
+   - Set expiration: 90 days (or longer)
+   - Repository access: Select "Only select repositories" → Choose `homeassistant-pi5-kiosk`
+   - Permissions:
+     - **Contents**: Read and write access
+     - **Pull requests**: Read and write access
+   - Click "Generate token" and **copy the token**
+
+2. **Add token to repository secrets:**
+   - Go to: <https://github.com/jcoetsie/homeassistant-pi5-kiosk/settings/secrets/actions>
+   - Click "New repository secret"
+   - Name: `PAT_TOKEN`
+   - Value: Paste your token
+   - Click "Add secret"
 
 #### Trigger a Release
 

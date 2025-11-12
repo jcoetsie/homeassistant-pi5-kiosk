@@ -132,6 +132,20 @@ Runs on every push and PR.
 
 ## Release Process
 
+### Prerequisites
+
+**Important:** Since the `main` branch is protected, you must set up a Personal Access Token (PAT) first:
+
+1. Create a fine-grained PAT at <https://github.com/settings/tokens?type=beta>
+   - Name: `homeassistant-pi5-kiosk-releases`
+   - Repository: `homeassistant-pi5-kiosk` only
+   - Permissions: Contents (read/write), Pull requests (read/write)
+2. Add to repository secrets as `PAT_TOKEN`
+   - Go to: Repository Settings → Secrets and variables → Actions
+   - Create secret named `PAT_TOKEN` with your token value
+
+Without this token, the release workflow cannot push to the protected `main` branch.
+
 ### Automated Release (Recommended)
 
 Releases are handled automatically via GitHub Actions:
