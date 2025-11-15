@@ -148,43 +148,63 @@
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Home Assistant Kiosk</title>
           <style>
-              body { margin: 0; font-family: Arial, sans-serif; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
-              #status { font-size: 2em; text-align: center; }
-              iframe { width: 100vw; height: 100vh; border: none; display: none; }
+              body {
+                  margin: 0;
+                  font-family: Arial, sans-serif;
+                  background: #1a1a1a;
+                  color: #fff;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+              }
+              #status {
+                  font-size: 2.5em;
+                  text-align: center;
+                  padding: 40px;
+              }
+              .spinner {
+                  border: 8px solid #333;
+                  border-top: 8px solid #fff;
+                  border-radius: 50%;
+                  width: 60px;
+                  height: 60px;
+                  animation: spin 1s linear infinite;
+                  margin: 20px auto;
+              }
+              @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+              }
           </style>
       </head>
       <body>
-          <div id="status">Checking Home Assistant...</div>
-          <iframe id="ha"></iframe>
+          <div id="status">
+              <div class="spinner"></div>
+              <div>Connecting to Home Assistant...</div>
+          </div>
           <script>
               const haUrl = '{{ kiosk_url }}';
-              const haFrame = document.getElementById('ha');
-              const statusDiv = document.getElementById('status');
-              let lastState = null;
+              let checkCount = 0;
 
               function checkHA() {
+                  checkCount++;
                   fetch(haUrl, { method: 'HEAD', mode: 'no-cors' })
                       .then(() => {
-                          if (lastState !== 'up') {
-                              statusDiv.style.display = 'none';
-                              haFrame.style.display = 'block';
-                              haFrame.src = haUrl;
-                              lastState = 'up';
-                          }
+                          // Home Assistant is up, redirect to it
+                          window.location.href = haUrl;
                       })
                       .catch(() => {
-                          if (lastState !== 'down') {
-                              statusDiv.innerText = 'Home Assistant is down, checking...';
-                              statusDiv.style.display = 'block';
-                              haFrame.style.display = 'none';
-                              haFrame.src = '';
-                              lastState = 'down';
-                          }
+                          // Still checking, update message
+                          const statusDiv = document.querySelector('#status div:last-child');
+                          statusDiv.textContent = `Waiting for Home Assistant... (${checkCount * 10}s)`;
                       });
               }
 
-              setInterval(checkHA, 10000); // Check every 10 seconds
-              checkHA(); // Initial check
+              // Check immediately
+              checkHA();
+              // Then check every 10 seconds
+              setInterval(checkHA, 10000);
           </script>
       </body>
       </html>
