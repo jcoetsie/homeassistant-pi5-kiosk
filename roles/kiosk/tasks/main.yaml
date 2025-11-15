@@ -43,33 +43,13 @@
       done
       echo "$(date): Network is up!"
 
-      # Launch Chromium with monitor HTML immediately
-      # The monitor page will show connection status and retry automatically
-      echo "$(date): Launching chromium in kiosk mode..."
-      {{ kiosk_browser }} \
-        --kiosk \
-        --noerrdialogs \
-        --disable-infobars \
-        --no-first-run \
-        --no-default-browser-check \
-        --disable-sync \
-        --disable-translate \
-        --disable-features=Translate,TranslateUI \
-        --disable-component-update \
-        --overscroll-history-navigation=0 \
-        --disable-breakpad \
-        --disable-session-crashed-bubble \
-        --disable-restore-session-state \
-        --check-for-update-interval=31536000 \
-        --password-store=basic \
-        --use-mock-keychain \
-        --enable-features=TouchTextEditingRedesign \
-        --force-tablet-mode=touch \
-        --touch-events=enabled \
-        --enable-pinch \
-        --enable-smooth-scrolling \
-        --user-data-dir=/home/{{ kiosk_user }}/.config/chromium-kiosk \
-        --app=file:///home/{{ kiosk_user }}/ha-monitor.html >> "$LOG_FILE" 2>&1
+      # Monitor script will handle Chromium lifecycle
+      echo "$(date): Monitor script will manage Chromium based on HA availability"
+
+      # Keep the script running indefinitely
+      while true; do
+        sleep 3600
+      done
 
 - name: Configure X session for kiosk mode
   ansible.builtin.copy:
@@ -145,76 +125,61 @@
     mode: "0755"
     content: |
       #!/bin/bash
-      # Home Assistant availability monitor
-      # Switches between HA and error page based on availability
+      # Home Assistant Availability Monitor
+      # Continuously checks if HA is available and restarts Chromium with appropriate page
 
-      HA_URL="{{ kiosk_url }}"
-      HA_HOST="{{ home_assistant_ip }}"
-      ERROR_PAGE="file:///home/{{ kiosk_user }}/ha-error.html"
-      CHECK_INTERVAL=10
-      CURRENT_STATE=""
+      KIOSK_URL="{{ kiosk_url }}"
+      ERROR_PAGE="file:///home/kiosk/ha-error.html"
+      CHECK_INTERVAL=5
+      LOG_FILE="/home/kiosk/ha-monitor.log"
+      CHROMIUM_FLAGS="--kiosk --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check --disable-sync --disable-translate --disable-features=Translate,TranslateUI --disable-component-update --overscroll-history-navigation=0 --disable-breakpad --disable-session-crashed-bubble --disable-restore-session-state --check-for-update-interval=31536000 --password-store=basic --use-mock-keychain --enable-features=TouchTextEditingRedesign --force-tablet-mode=touch --touch-events=enabled --enable-pinch --enable-smooth-scrolling --user-data-dir=/home/kiosk/.config/chromium-kiosk"
+
+      export DISPLAY=:0
 
       log() {
-          echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> /home/{{ kiosk_user }}/ha-monitor.log
+          echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> "$LOG_FILE"
       }
 
-      check_ha() {
-          # Check if Home Assistant is responding
-          if curl --output /dev/null --silent --fail --max-time 3 "$HA_URL"; then
-              echo "up"
-          else
-              echo "down"
-          fi
+      start_chromium_with_error() {
+          log "Starting Chromium with error page - HA is down"
+          pkill -9 -f chromium
+          sleep 1
+          chromium $CHROMIUM_FLAGS --app="$ERROR_PAGE" &
       }
 
-      get_current_url() {
-          # Get current URL from Chromium using xdotool
-          export DISPLAY=:0
-          xdotool search --class "Chromium" getwindowname 2>/dev/null | head -1
-      }
-
-      switch_to_error_page() {
-          export DISPLAY=:0
-          log "Switching to error page - HA is down"
-          # Use xdotool to send Ctrl+L (focus address bar) and type new URL
-          WID=$(xdotool search --class "Chromium" | head -1)
-          if [ -n "$WID" ]; then
-              xdotool windowactivate --sync "$WID"
-              xdotool key --clearmodifiers ctrl+l
-              sleep 0.2
-              xdotool type --clearmodifiers "$ERROR_PAGE"
-              xdotool key Return
-          fi
-      }
-
-      switch_to_ha() {
-          export DISPLAY=:0
-          log "Switching to Home Assistant - HA is up"
-          WID=$(xdotool search --class "Chromium" | head -1)
-          if [ -n "$WID" ]; then
-              xdotool windowactivate --sync "$WID"
-              xdotool key --clearmodifiers ctrl+l
-              sleep 0.2
-              xdotool type --clearmodifiers "$HA_URL"
-              xdotool key Return
-          fi
+      start_chromium_with_ha() {
+          log "Starting Chromium with Home Assistant - HA is up"
+          pkill -9 -f chromium
+          sleep 1
+          chromium $CHROMIUM_FLAGS --app="$KIOSK_URL" &
       }
 
       log "HA Monitor started"
 
+      # Initial state detection
+      if curl --output /dev/null --silent --fail --max-time 3 "$KIOSK_URL"; then
+          CURRENT_STATE="up"
+          start_chromium_with_ha
+      else
+          CURRENT_STATE="down"
+          start_chromium_with_error
+      fi
+
+      # Monitoring loop
       while true; do
-          NEW_STATE=$(check_ha)
-
-          if [ "$NEW_STATE" != "$CURRENT_STATE" ]; then
-              if [ "$NEW_STATE" = "up" ]; then
-                  switch_to_ha
-              else
-                  switch_to_error_page
-              fi
-              CURRENT_STATE="$NEW_STATE"
-          fi
-
           sleep "$CHECK_INTERVAL"
+
+          if curl --output /dev/null --silent --fail --max-time 3 "$KIOSK_URL"; then
+              if [ "$CURRENT_STATE" = "down" ]; then
+                  CURRENT_STATE="up"
+                  start_chromium_with_ha
+              fi
+          else
+              if [ "$CURRENT_STATE" = "up" ]; then
+                  CURRENT_STATE="down"
+                  start_chromium_with_error
+              fi
+          fi
       done
 
 - name: Create Home Assistant error page
