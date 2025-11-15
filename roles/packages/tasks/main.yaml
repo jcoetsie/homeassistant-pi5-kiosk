@@ -10,6 +10,7 @@
       - matchbox-window-manager
       - matchbox-keyboard
       - x11-xserver-utils
+      - xdotool
       - curl
       - yad
       - logrotate

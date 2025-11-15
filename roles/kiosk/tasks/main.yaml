@@ -104,6 +104,9 @@
       # Start floating keyboard button in background
       /home/{{ kiosk_user }}/keyboard-button.sh &
 
+      # Start Home Assistant availability monitor in background
+      /home/{{ kiosk_user }}/ha-monitor.sh &
+
       # Start kiosk script
       /home/{{ kiosk_user }}/kiosk.sh
 
@@ -133,6 +136,161 @@
   loop:
     - "pam_gnome_keyring"
   notify: Restart lightdm
+
+- name: Create Home Assistant availability monitor script
+  ansible.builtin.copy:
+    dest: "/home/{{ kiosk_user }}/ha-monitor.sh"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Home Assistant availability monitor
+      # Switches between HA and error page based on availability
+
+      HA_URL="{{ kiosk_url }}"
+      HA_HOST="{{ home_assistant_ip }}"
+      ERROR_PAGE="file:///home/{{ kiosk_user }}/ha-error.html"
+      CHECK_INTERVAL=10
+      CURRENT_STATE=""
+
+      log() {
+          echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" >> /home/{{ kiosk_user }}/ha-monitor.log
+      }
+
+      check_ha() {
+          # Check if Home Assistant is responding
+          if curl --output /dev/null --silent --fail --max-time 3 "$HA_URL"; then
+              echo "up"
+          else
+              echo "down"
+          fi
+      }
+
+      get_current_url() {
+          # Get current URL from Chromium using xdotool
+          export DISPLAY=:0
+          xdotool search --class "Chromium" getwindowname 2>/dev/null | head -1
+      }
+
+      switch_to_error_page() {
+          export DISPLAY=:0
+          log "Switching to error page - HA is down"
+          # Use xdotool to send Ctrl+L (focus address bar) and type new URL
+          WID=$(xdotool search --class "Chromium" | head -1)
+          if [ -n "$WID" ]; then
+              xdotool windowactivate --sync "$WID"
+              xdotool key --clearmodifiers ctrl+l
+              sleep 0.2
+              xdotool type --clearmodifiers "$ERROR_PAGE"
+              xdotool key Return
+          fi
+      }
+
+      switch_to_ha() {
+          export DISPLAY=:0
+          log "Switching to Home Assistant - HA is up"
+          WID=$(xdotool search --class "Chromium" | head -1)
+          if [ -n "$WID" ]; then
+              xdotool windowactivate --sync "$WID"
+              xdotool key --clearmodifiers ctrl+l
+              sleep 0.2
+              xdotool type --clearmodifiers "$HA_URL"
+              xdotool key Return
+          fi
+      }
+
+      log "HA Monitor started"
+
+      while true; do
+          NEW_STATE=$(check_ha)
+
+          if [ "$NEW_STATE" != "$CURRENT_STATE" ]; then
+              if [ "$NEW_STATE" = "up" ]; then
+                  switch_to_ha
+              else
+                  switch_to_error_page
+              fi
+              CURRENT_STATE="$NEW_STATE"
+          fi
+
+          sleep "$CHECK_INTERVAL"
+      done
+
+- name: Create Home Assistant error page
+  ansible.builtin.copy:
+    dest: "/home/{{ kiosk_user }}/ha-error.html"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: "0644"
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Home Assistant Unavailable</title>
+          <style>
+              body {
+                  margin: 0;
+                  font-family: Arial, sans-serif;
+                  background: #1a1a1a;
+                  color: #fff;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+              }
+              .container {
+                  text-align: center;
+                  padding: 40px;
+              }
+              h1 {
+                  font-size: 3em;
+                  margin-bottom: 20px;
+                  color: #ff6b6b;
+              }
+              .spinner {
+                  border: 8px solid #333;
+                  border-top: 8px solid #ff6b6b;
+                  border-radius: 50%;
+                  width: 80px;
+                  height: 80px;
+                  animation: spin 1s linear infinite;
+                  margin: 30px auto;
+              }
+              @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+              }
+              .message {
+                  font-size: 1.5em;
+                  margin-top: 20px;
+              }
+              .time {
+                  font-size: 1.2em;
+                  color: #888;
+                  margin-top: 20px;
+              }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>⚠️ Connection Lost</h1>
+              <div class="spinner"></div>
+              <div class="message">Home Assistant is temporarily unavailable</div>
+              <div class="time" id="time">Reconnecting...</div>
+          </div>
+          <script>
+              let seconds = 0;
+              setInterval(() => {
+                  seconds += 10;
+                  document.getElementById('time').textContent =
+                      `Checking again in ${10 - (seconds % 10)} seconds... (${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')})`;
+              }, 1000);
+          </script>
+      </body>
+      </html>
 
 - name: Create Home Assistant monitor HTML file
   ansible.builtin.copy:
