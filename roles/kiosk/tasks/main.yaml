@@ -142,6 +142,33 @@
 
       start_chromium_with_error() {
           log "Starting Chromium with error page - HA is down"
+
+          # Create diagnostics file with status checks
+          DIAG_FILE="/home/kiosk/ha-diagnostics.json"
+          NETWORK_OK="false"
+          DNS_OK="false"
+          HA_HOST_OK="false"
+          HA_PORT_OK="false"
+
+          # Check internet connectivity
+          if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+              NETWORK_OK="true"
+          fi
+
+          # Check DNS resolution
+          if ping -c 1 -W 2 {{ home_assistant_ip }} >/dev/null 2>&1; then
+              DNS_OK="true"
+              HA_HOST_OK="true"
+          fi
+
+          # Check HA port accessibility
+          if timeout 2 bash -c "cat < /dev/null > /dev/tcp/{{ home_assistant_ip }}/8123" 2>/dev/null; then
+              HA_PORT_OK="true"
+          fi
+
+          # Write diagnostics JSON
+          echo "{\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"network_ok\":$NETWORK_OK,\"dns_ok\":$DNS_OK,\"ha_host_reachable\":$HA_HOST_OK,\"ha_port_open\":$HA_PORT_OK,\"ha_url\":\"$KIOSK_URL\",\"ha_ip\":\"{{ home_assistant_ip }}\"}" > "$DIAG_FILE"
+
           pkill -9 -f chromium
           sleep 1
           chromium $CHROMIUM_FLAGS --app="$ERROR_PAGE" &
@@ -245,14 +272,59 @@
               <div class="spinner"></div>
               <div class="message">Home Assistant is temporarily unavailable</div>
               <div class="time" id="time">Reconnecting...</div>
+
+              <div style="margin-top: 40px; text-align: left; max-width: 500px; margin-left: auto; margin-right: auto;">
+                  <h2 style="font-size: 1.5em; margin-bottom: 15px;">🔍 Diagnostics</h2>
+                  <div id="diagnostics" style="font-family: monospace; font-size: 1.1em;">
+                      <div style="margin: 10px 0;">
+                          <span id="network-status">⏳</span> Network Connection
+                      </div>
+                      <div style="margin: 10px 0;">
+                          <span id="dns-status">⏳</span> DNS Resolution
+                      </div>
+                      <div style="margin: 10px 0;">
+                          <span id="ha-host-status">⏳</span> Home Assistant Host Reachable
+                      </div>
+                      <div style="margin: 10px 0;">
+                          <span id="ha-port-status">⏳</span> Home Assistant Port (8123) Open
+                      </div>
+                      <div style="margin-top: 20px; color: #888; font-size: 0.9em;" id="ha-info">
+                          Target: <span id="ha-url">...</span>
+                      </div>
+                  </div>
+              </div>
           </div>
           <script>
               let seconds = 0;
+
+              // Update timer
               setInterval(() => {
-                  seconds += 10;
+                  seconds += 1;
+                  const remaining = 5 - (seconds % 5);
                   document.getElementById('time').textContent =
-                      `Checking again in ${10 - (seconds % 10)} seconds... (${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')})`;
+                      `Checking again in ${remaining} seconds... (${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')})`;
               }, 1000);
+
+              // Load diagnostics
+              function loadDiagnostics() {
+                  fetch('file:///home/kiosk/ha-diagnostics.json')
+                      .then(response => response.json())
+                      .then(data => {
+                          document.getElementById('network-status').textContent = data.network_ok ? '✅' : '❌';
+                          document.getElementById('dns-status').textContent = data.dns_ok ? '✅' : '❌';
+                          document.getElementById('ha-host-status').textContent = data.ha_host_reachable ? '✅' : '❌';
+                          document.getElementById('ha-port-status').textContent = data.ha_port_open ? '✅' : '❌';
+                          document.getElementById('ha-url').textContent = data.ha_url;
+                      })
+                      .catch(() => {
+                          // Diagnostics not ready yet
+                          setTimeout(loadDiagnostics, 1000);
+                      });
+              }
+
+              loadDiagnostics();
+              // Refresh diagnostics every 5 seconds
+              setInterval(loadDiagnostics, 5000);
           </script>
       </body>
       </html>
