@@ -18,7 +18,7 @@
     group: root
     mode: "0755"
 
-- name: Configure VNC authentication to use VncAuth
+- name: Configure VNC to share existing X session
   ansible.builtin.copy:
     dest: /root/.vnc/config.d/vncserver-x11
     owner: root
@@ -27,6 +27,8 @@
     content: |
       Authentication=VncAuth
       Encryption=PreferOn
+      AvoidExistingConnections=0
+      IdleTimeout=0
 
 - name: Set system-wide VNC password
   ansible.builtin.shell: |
@@ -38,12 +40,12 @@
   changed_when: true
   no_log: true
 
+- name: Ensure graphical boot mode
+  ansible.builtin.command: raspi-config nonint do_boot_behaviour B4
+  changed_when: true
+
 - name: Restart VNC server service
   ansible.builtin.systemd:
     name: vncserver-x11-serviced
     state: restarted
     enabled: true
-
-- name: Ensure graphical boot mode
-  ansible.builtin.command: raspi-config nonint do_boot_behaviour B4
-  changed_when: true
