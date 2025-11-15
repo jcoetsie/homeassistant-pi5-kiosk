@@ -43,18 +43,8 @@
       done
       echo "$(date): Network is up!"
 
-      # Wait for Home Assistant to be ready (using GET instead of HEAD)
-      echo "$(date): Waiting for Home Assistant..."
-      MAX_WAIT=12
-      for i in $(seq 1 $MAX_WAIT); do
-        if curl --output /dev/null --silent --fail --max-time 3 "{{ kiosk_url }}"; then
-          echo "$(date): Home Assistant is responding!"
-          break
-        fi
-        echo "$(date): Waiting for Home Assistant... ($i/$MAX_WAIT)"
-        sleep 5
-      done
-
+      # Launch Chromium with monitor HTML immediately
+      # The monitor page will show connection status and retry automatically
       echo "$(date): Launching chromium in kiosk mode..."
       {{ kiosk_browser }} \
         --kiosk \
@@ -79,7 +69,7 @@
         --enable-pinch \
         --enable-smooth-scrolling \
         --user-data-dir=/home/{{ kiosk_user }}/.config/chromium-kiosk \
-        "{{ kiosk_url }}" >> "$LOG_FILE" 2>&1
+        --app=file:///home/{{ kiosk_user }}/ha-monitor.html >> "$LOG_FILE" 2>&1
 
 - name: Configure X session for kiosk mode
   ansible.builtin.copy:
@@ -143,3 +133,75 @@
   loop:
     - "pam_gnome_keyring"
   notify: Restart lightdm
+
+- name: Create Home Assistant monitor HTML file
+  ansible.builtin.copy:
+    dest: "/home/{{ kiosk_user }}/ha-monitor.html"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: "0644"
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Home Assistant Kiosk</title>
+          <style>
+              body { margin: 0; font-family: Arial, sans-serif; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+              #status { font-size: 2em; text-align: center; }
+              iframe { width: 100vw; height: 100vh; border: none; display: none; }
+          </style>
+      </head>
+      <body>
+          <div id="status">Checking Home Assistant...</div>
+          <iframe id="ha"></iframe>
+          <script>
+              const haUrl = '{{ kiosk_url }}';
+              const haFrame = document.getElementById('ha');
+              const statusDiv = document.getElementById('status');
+              let lastState = null;
+
+              function checkHA() {
+                  fetch(haUrl, { method: 'HEAD', mode: 'no-cors' })
+                      .then(() => {
+                          if (lastState !== 'up') {
+                              statusDiv.style.display = 'none';
+                              haFrame.style.display = 'block';
+                              haFrame.src = haUrl;
+                              lastState = 'up';
+                          }
+                      })
+                      .catch(() => {
+                          if (lastState !== 'down') {
+                              statusDiv.innerText = 'Home Assistant is down, checking...';
+                              statusDiv.style.display = 'block';
+                              haFrame.style.display = 'none';
+                              haFrame.src = '';
+                              lastState = 'down';
+                          }
+                      });
+              }
+
+              setInterval(checkHA, 10000); // Check every 10 seconds
+              checkHA(); // Initial check
+          </script>
+      </body>
+      </html>
+
+- name: Configure kiosk systemd service to use monitor HTML
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/kiosk.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Kiosk Display
+      After=network.target
+
+      [Service]
+      User={{ kiosk_user }}
+      ExecStart=/usr/bin/chromium-browser --kiosk --disable-web-security --user-data-dir=/home/{{ kiosk_user }}/.chromium --app=file:///home/{{ kiosk_user }}/ha-monitor.html
+      Restart=always
+
+      [Install]
+      WantedBy=graphical.target
