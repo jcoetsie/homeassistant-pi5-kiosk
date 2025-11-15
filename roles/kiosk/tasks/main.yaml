@@ -264,32 +264,65 @@
                   color: #888;
                   margin-top: 20px;
               }
+              .status-icon {
+                  display: inline-block;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  margin-right: 10px;
+                  text-align: center;
+                  line-height: 24px;
+                  font-weight: bold;
+                  font-size: 16px;
+              }
+              .status-ok {
+                  background: #4caf50;
+                  color: white;
+              }
+              .status-fail {
+                  background: #f44336;
+                  color: white;
+              }
+              .status-wait {
+                  background: #ff9800;
+                  color: white;
+              }
+              .diag-item {
+                  margin: 15px 0;
+                  font-size: 1.1em;
+                  display: flex;
+                  align-items: center;
+              }
           </style>
       </head>
       <body>
           <div class="container">
-              <h1>⚠️ Connection Lost</h1>
+              <h1>⚠ Connection Lost</h1>
               <div class="spinner"></div>
               <div class="message">Home Assistant is temporarily unavailable</div>
               <div class="time" id="time">Reconnecting...</div>
 
-              <div style="margin-top: 40px; text-align: left; max-width: 500px; margin-left: auto; margin-right: auto;">
-                  <h2 style="font-size: 1.5em; margin-bottom: 15px;">🔍 Diagnostics</h2>
-                  <div id="diagnostics" style="font-family: monospace; font-size: 1.1em;">
-                      <div style="margin: 10px 0;">
-                          <span id="network-status">⏳</span> Network Connection
+              <div style="margin-top: 40px; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
+                  <h2 style="font-size: 1.8em; margin-bottom: 20px; text-align: center;">Diagnostics</h2>
+                  <div id="diagnostics">
+                      <div class="diag-item">
+                          <span id="network-status" class="status-icon status-wait">?</span>
+                          <span>Network Connection</span>
                       </div>
-                      <div style="margin: 10px 0;">
-                          <span id="dns-status">⏳</span> DNS Resolution
+                      <div class="diag-item">
+                          <span id="dns-status" class="status-icon status-wait">?</span>
+                          <span>DNS Resolution</span>
                       </div>
-                      <div style="margin: 10px 0;">
-                          <span id="ha-host-status">⏳</span> Home Assistant Host Reachable
+                      <div class="diag-item">
+                          <span id="ha-host-status" class="status-icon status-wait">?</span>
+                          <span>Home Assistant Host Reachable</span>
                       </div>
-                      <div style="margin: 10px 0;">
-                          <span id="ha-port-status">⏳</span> Home Assistant Port (8123) Open
+                      <div class="diag-item">
+                          <span id="ha-port-status" class="status-icon status-wait">?</span>
+                          <span>Home Assistant Port (8123) Open</span>
                       </div>
-                      <div style="margin-top: 20px; color: #888; font-size: 0.9em;" id="ha-info">
-                          Target: <span id="ha-url">...</span>
+                      <div style="margin-top: 30px; color: #888; font-size: 1em; text-align: center;" id="ha-info">
+                          Target: <span id="ha-url" style="color: #aaa;">...</span>
                       </div>
                   </div>
               </div>
@@ -310,16 +343,22 @@
                   fetch('file:///home/kiosk/ha-diagnostics.json')
                       .then(response => response.json())
                       .then(data => {
-                          document.getElementById('network-status').textContent = data.network_ok ? '✅' : '❌';
-                          document.getElementById('dns-status').textContent = data.dns_ok ? '✅' : '❌';
-                          document.getElementById('ha-host-status').textContent = data.ha_host_reachable ? '✅' : '❌';
-                          document.getElementById('ha-port-status').textContent = data.ha_port_open ? '✅' : '❌';
+                          updateStatus('network-status', data.network_ok);
+                          updateStatus('dns-status', data.dns_ok);
+                          updateStatus('ha-host-status', data.ha_host_reachable);
+                          updateStatus('ha-port-status', data.ha_port_open);
                           document.getElementById('ha-url').textContent = data.ha_url;
                       })
                       .catch(() => {
                           // Diagnostics not ready yet
                           setTimeout(loadDiagnostics, 1000);
                       });
+              }
+
+              function updateStatus(elementId, isOk) {
+                  const el = document.getElementById(elementId);
+                  el.className = 'status-icon ' + (isOk ? 'status-ok' : 'status-fail');
+                  el.textContent = isOk ? '✓' : '✗';
               }
 
               loadDiagnostics();
