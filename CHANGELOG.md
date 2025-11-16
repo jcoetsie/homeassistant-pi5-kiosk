@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### [1.0.3](https://github.com/jcoetsie/homeassistant-pi5-kiosk/compare/v1.0.2...v1.0.3) (2025-11-16)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** Remove sudo requirement from maintenance workflow ([#5](https://github.com/jcoetsie/homeassistant-pi5-kiosk/issues/5)) ([aa60068](https://github.com/jcoetsie/homeassistant-pi5-kiosk/commit/aa600684e81ba4706f1d51ec469dc2d8eb5de1e9))
+* **kiosk:** Comprehensive kiosk mode improvements for zero user interaction ([#7](https://github.com/jcoetsie/homeassistant-pi5-kiosk/issues/7)) ([29c20bf](https://github.com/jcoetsie/homeassistant-pi5-kiosk/commit/29c20bf58ba5a94c83eb8ce0a0ada762be7d4428))
+* **kiosk:** Disable gnome-keyring to prevent password prompts ([#6](https://github.com/jcoetsie/homeassistant-pi5-kiosk/issues/6)) ([3960f46](https://github.com/jcoetsie/homeassistant-pi5-kiosk/commit/3960f46aa95aaf3c87aaf65d5dbdb66b68dc97c7))
+* **packages:** Add become: true to handlers and lightdm autologin task ([#8](https://github.com/jcoetsie/homeassistant-pi5-kiosk/issues/8)) ([dfe6360](https://github.com/jcoetsie/homeassistant-pi5-kiosk/commit/dfe6360bb1015276b042f88f934cfe5fed169b8a))
+
 ### [1.0.2](https://github.com/jcoetsie/homeassistant-pi5-kiosk/compare/v1.0.1...v1.0.2) (2025-11-12)
 
 
