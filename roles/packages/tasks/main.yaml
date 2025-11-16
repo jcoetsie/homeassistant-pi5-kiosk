@@ -1,4 +1,3 @@
----
 # Packages role - Install all required packages
 - name: Install required packages
   ansible.builtin.apt:
@@ -16,13 +15,20 @@
       - logrotate
     state: present
 
-- name: Configure lightdm to autologin kiosk user
+- name: Ensure autologin-user is set
   ansible.builtin.lineinfile:
     path: /etc/lightdm/lightdm.conf
-    regexp: "^#?{{ item.key }}="
-    line: "{{ item.key }}={{ item.value }}"
+    regexp: "^#?autologin-user=.*"
+    line: "autologin-user={{ kiosk_user }}"
     state: present
-  loop:
-    - { key: 'autologin-user', value: '{{ kiosk_user }}' }
-    - { key: 'autologin-user-timeout', value: '0' }
+  become: true
+  notify: Restart lightdm
+
+- name: Ensure autologin-user-timeout is set
+  ansible.builtin.lineinfile:
+    path: /etc/lightdm/lightdm.conf
+    regexp: "^#?autologin-user-timeout=.*"
+    line: "autologin-user-timeout=0"
+    state: present
+  become: true
   notify: Restart lightdm
