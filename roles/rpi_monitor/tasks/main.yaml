@@ -1,0 +1,89 @@
+---
+# RPI Monitor role - Install and configure Raspberry Pi MQTT Monitor
+# https://github.com/hjelev/rpi-mqtt-monitor
+
+- name: Install rpi-mqtt-monitor dependencies
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - git
+    state: present
+  become: true
+
+- name: Create rpi-monitor directory
+  ansible.builtin.file:
+    path: /opt/rpi-mqtt-monitor
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Clone rpi-mqtt-monitor repository
+  ansible.builtin.git:
+    repo: https://github.com/hjelev/rpi-mqtt-monitor.git
+    dest: /opt/rpi-mqtt-monitor
+    version: master
+    force: true
+  become: true
+
+- name: Install Python dependencies for rpi-mqtt-monitor
+  ansible.builtin.pip:
+    requirements: /opt/rpi-mqtt-monitor/requirements.txt
+    state: present
+  become: true
+
+- name: Create rpi-mqtt-monitor config file
+  ansible.builtin.copy:
+    dest: /opt/rpi-mqtt-monitor/config.py
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      mqtt_broker = "{{ mqtt_broker | default('192.168.1.5', true) }}"
+      mqtt_port = {{ mqtt_port | default(1883, true) }}
+      mqtt_user = "{{ mqtt_user | default('', true) }}"
+      mqtt_password = "{{ mqtt_password | default('', true) }}"
+      mqtt_topic_prefix = "{{ mqtt_topic_prefix | default('homeassistant', true) }}"
+      device_id = "{{ mqtt_device_id | default(inventory_hostname, true) }}"
+      check_interval = {{ mqtt_check_interval | default(60, true) }}
+      check_wifi_strength = {{ mqtt_check_wifi | default('True', true) }}
+      check_storage = {{ mqtt_check_storage | default('True', true) }}
+      external_drive_check = {{ mqtt_check_external_drive | default('False', true) }}
+  become: true
+  notify: Restart rpi-mqtt-monitor
+
+- name: Create systemd service for rpi-mqtt-monitor
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/rpi-mqtt-monitor.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Raspberry Pi MQTT Monitor
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=root
+      WorkingDirectory=/opt/rpi-mqtt-monitor
+      ExecStart=/usr/bin/python3 /opt/rpi-mqtt-monitor/src/rpi-mqtt-monitor.py
+      Restart=on-failure
+      RestartSec=30
+
+      [Install]
+      WantedBy=multi-user.target
+  become: true
+  notify: Restart rpi-mqtt-monitor
+
+- name: Enable and start rpi-mqtt-monitor service
+  ansible.builtin.systemd:
+    name: rpi-mqtt-monitor
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

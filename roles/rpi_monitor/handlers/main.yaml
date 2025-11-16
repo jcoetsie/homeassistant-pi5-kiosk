@@ -1,0 +1,8 @@
+---
+# Handlers for rpi_monitor role
+- name: Restart rpi-mqtt-monitor
+  ansible.builtin.systemd:
+    name: rpi-mqtt-monitor
+    state: restarted
+    daemon_reload: true
+  become: true

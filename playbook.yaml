@@ -16,6 +16,14 @@
     wifi_country: "BE"
     github_runner_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') | default('', true) }}"
     github_repo: "{{ lookup('env', 'GITHUB_REPO') | default('', true) }}"
+    mqtt_broker: "{{ lookup('env', 'MQTT_BROKER') | default(home_assistant_ip, true) }}"
+    mqtt_port: "{{ lookup('env', 'MQTT_PORT') | default(1883, true) }}"
+    mqtt_user: "{{ lookup('env', 'MQTT_USER') | default('', true) }}"
+    mqtt_password: "{{ lookup('env', 'MQTT_PASSWORD') | default('', true) }}"
+    mqtt_topic_prefix: "{{ lookup('env', 'MQTT_TOPIC_PREFIX') | default('homeassistant', true) }}"
+    mqtt_device_id: "{{ lookup('env', 'MQTT_DEVICE_ID') | default(inventory_hostname, true) }}"
+    mqtt_check_interval: "{{ lookup('env', 'MQTT_CHECK_INTERVAL') | default(60, true) }}"
+    enable_rpi_monitor: "{{ lookup('env', 'ENABLE_RPI_MONITOR') | default('false', true) }}"
 
   roles:
     - role: common
@@ -26,5 +34,7 @@
     - role: kiosk
     - role: keyboard
     - role: logs
+    - role: rpi_monitor
+      when: enable_rpi_monitor | bool
     - role: github_runner
       when: github_runner_token != '' and github_repo != ''
