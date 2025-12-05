@@ -84,9 +84,6 @@
       # Start floating keyboard button in background
       /home/{{ kiosk_user }}/keyboard-button.sh &
 
-      # Start Home Assistant availability monitor in background
-      /home/{{ kiosk_user }}/ha-monitor.sh &
-
       # Start kiosk script
       /home/{{ kiosk_user }}/kiosk.sh
 
@@ -454,8 +451,9 @@
 
       [Service]
       User={{ kiosk_user }}
-      ExecStart=/usr/bin/chromium-browser --kiosk --disable-web-security --user-data-dir=/home/{{ kiosk_user }}/.chromium --app=file:///home/{{ kiosk_user }}/ha-monitor.html
-      Restart=always
+            ExecStartPre=/bin/pkill -f /home/{{ kiosk_user }}/ha-monitor.sh || true
+            ExecStart=/home/{{ kiosk_user }}/ha-monitor.sh
+            Restart=always
 
       [Install]
       WantedBy=graphical.target
