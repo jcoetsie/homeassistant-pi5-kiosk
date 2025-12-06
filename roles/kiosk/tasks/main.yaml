@@ -129,7 +129,7 @@
       ERROR_PAGE="file:///home/kiosk/ha-error.html"
       CHECK_INTERVAL=5
       LOG_FILE="/home/kiosk/ha-monitor.log"
-      CHROMIUM_FLAGS="--kiosk --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check --disable-sync --disable-translate --disable-features=Translate,TranslateUI --disable-component-update --overscroll-history-navigation=0 --disable-breakpad --disable-session-crashed-bubble --disable-restore-session-state --check-for-update-interval=31536000 --password-store=basic --use-mock-keychain --enable-features=TouchTextEditingRedesign --force-tablet-mode=touch --touch-events=enabled --enable-pinch --enable-smooth-scrolling --user-data-dir=/home/kiosk/.config/chromium-kiosk"
+            CHROMIUM_FLAGS="--disable-gpu --disable-gpu-compositing --kiosk --noerrdialogs --disable-infobars --no-first-run --no-default-browser-check --disable-sync --disable-translate --disable-features=Translate,TranslateUI --disable-component-update --overscroll-history-navigation=0 --disable-breakpad --disable-session-crashed-bubble --disable-restore-session-state --check-for-update-interval=31536000 --password-store=basic --use-mock-keychain --enable-features=TouchTextEditingRedesign --force-tablet-mode=touch --touch-events=enabled --enable-pinch --enable-smooth-scrolling --user-data-dir=/home/kiosk/.config/chromium-kiosk"
 
       export DISPLAY=:0
 
