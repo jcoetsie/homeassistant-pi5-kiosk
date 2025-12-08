@@ -50,24 +50,22 @@
     group: root
     mode: "0644"
     content: |
-      from random import randrange
+      # Generated config for rpi-mqtt-monitor (deployed by Ansible)
+      import os
 
-      # Script version
       version = "0.6.3"
 
       # MQTT server configuration
-      mqtt_host = "{{ mqtt_broker }}"
-      mqtt_user = "{{ mqtt_user }}"
-      mqtt_password = "{{ mqtt_password }}"
-      mqtt_port = {{ mqtt_port }}
-      mqtt_discovery_prefix = "{{ mqtt_topic_prefix }}"
-      mqtt_topic_prefix = "rpi-{{ mqtt_device_id }}"
+      mqtt_host = "{{ mqtt_broker | default('127.0.0.1') }}"
+      mqtt_user = "{{ mqtt_user | default('') }}"
+      mqtt_password = "{{ mqtt_password | default('') }}"
+      mqtt_port = {{ mqtt_port | default(1883) }}
+      mqtt_discovery_prefix = "{{ mqtt_discovery_prefix | default('homeassistant') }}"
+      mqtt_topic_prefix = "rpi-{{ mqtt_device_id | default('pi') }}"
       mqtt_uns_structure = ""
 
-      # Retain flag for published topics
+      # Retain / QOS
       retain = True
-
-      # QOS setting for published topics
       qos = 0
 
       # Home Assistant API configuration (optional)
@@ -78,9 +76,9 @@
       language = "en"
 
       # Interval in seconds between probes
-      service_sleep_time = {{ mqtt_check_interval }}
+      service_sleep_time = {{ mqtt_check_interval | default(60) }}
 
-      # Features
+      # Feature flags and defaults
       discovery_messages = True
       restart_button = True
       shutdown_button = True
@@ -90,6 +88,7 @@
       git_update = True
       cpu_load = True
       cpu_temp = True
+      cpu_thermal_zone = 0
       used_space = True
       used_space_path = '/'
       voltage = False
@@ -100,10 +99,27 @@
       uptime_seconds = False
       wifi_strength = True
       wifi_ssid = True
+      wifi_signal = wifi_strength
+      wifi_signal_dbm = False
       network_speed_test = False
       external_drives = []
       ext_sensors = []
       use_availability = False
+
+      # Backwards-compatible / additional options referenced in the script
+      apt_updates = False
+      drive_temps = False
+      expire_after_time = 0
+      get_content_outputfile = False
+      net_io = False
+      output_filename = ''
+      output_mode = ''
+      output_type = ''
+      random_delay = 0
+      ha_device_name = "{{ ansible_hostname | default('pi') }}"
+      rpi5_fan_speed = False
+      rpi_power_status = False
+      update_check_interval = 86400
   become: true
   notify: Restart rpi-mqtt-monitor
 
